@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Host Page</title>
+    <script src="../src/talker.js"></script>
+</head>
+<body>
+
+<iframe src="guest.html" id="guest-frame"></iframe>
+
+<button type="button" id="message-button">Send a Message</button>
+
+<script>
+
+    var guestFrame = document.querySelector('#guest-frame');
+
+    var talker = new Talker(guestFrame.contentWindow, '*');
+
+    function sendSomething()
+    {
+        talker.send('test-namespace', { compute: "5 * 5" })
+                .then(function(message)
+                {
+                    console.log("Computation yields:" + message.data.result);
+                }, console.log.bind(console, "ERROR:"));
+    }
+
+    document.querySelector('#message-button').addEventListener('click', sendSomething, false);
+
+    talker.handshake.then(console.log.bind(console, "shook hands with guest."));
+
+</script>
+
+</body>
+</html>

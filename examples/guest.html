@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+    <meta charset="UTF-8">
+    <title>Guest Page</title>
+    <script src="../src/talker.js"></script>
+</head>
+<body>
+
+<input type="checkbox" id="async">Async execution</input>
+
+<script>
+
+    var talker = new Talker(parent, "*");
+
+    talker.onMessage = function(latestMessage)
+    {
+        console.log(latestMessage.namespace, latestMessage.data);
+        console.log(latestMessage.id, latestMessage.talker);
+
+        if (typeof latestMessage.data.compute === "string")
+        {
+            function computeAndPostResult(message)
+            {
+                message.respond({result: eval(message.data.compute)});
+            }
+
+            if (document.querySelector('#async').checked)
+            {
+                setTimeout(computeAndPostResult.bind(undefined, latestMessage), 1000);
+            }
+            else
+            {
+                computeAndPostResult(latestMessage);
+            }
+        }
+    };
+
+    talker.handshake.then(console.log.bind(console, "shook hands with host."));
+
+</script>
+
+</body>
+</html>

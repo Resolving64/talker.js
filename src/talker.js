@@ -7,106 +7,13 @@ var TALKER_TYPE = 'application/x-talkerjs-v1+json';
 var TALKER_ERR_TIMEOUT = 'timeout';
 //endregion Constants
 
-//region Third-Party Libraries
-/*
- * PinkySwear.js 2.1 - Minimalistic implementation of the Promises/A+ spec
- * Modified slightly for embedding in Talker.js
- * 
- * Public Domain. Use, modify and distribute it any way you like. No attribution required.
- *
- * NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
- *
- * PinkySwear is a very small implementation of the Promises/A+ specification. After compilation with the
- * Google Closure Compiler and gzipping it weighs less than 500 bytes. It is based on the implementation for 
- * Minified.js and should be perfect for embedding. 
- * 
- * https://github.com/timjansen/PinkySwear.js
- */
-var pinkySwearPromise = (function() {
-  var undef;
-
-  function isFunction(f) {
-    return typeof f == 'function';
-  }
-  function isObject(f) {
-    return typeof f == 'object';
-  }
-  function defer(callback) {
-    if (typeof setImmediate != 'undefined')
-  setImmediate(callback);
-    else if (typeof process != 'undefined' && process['nextTick'])
-  process['nextTick'](callback);
-    else
-  setTimeout(callback, 0);
-  }
-
-  return function pinkySwear() {
-    var state;           // undefined/null = pending, true = fulfilled, false = rejected
-    var values = [];     // an array of values as arguments for the then() handlers
-    var deferred = [];   // functions to call when set() is invoked
-
-    var set = function(newState, newValues) {
-      if (state == null && newState != null) {
-        state = newState;
-        values = newValues;
-        if (deferred.length)
-          defer(function() {
-            for (var i = 0; i < deferred.length; i++)
-            deferred[i]();
-          });
-      }
-      return state;
-    };
-
-    set['then'] = function (onFulfilled, onRejected) {
-      var promise2 = pinkySwear();
-      var callCallbacks = function() {
-        try {
-          var f = (state ? onFulfilled : onRejected);
-          if (isFunction(f)) {
-            function resolve(x) {
-              var then, cbCalled = 0;
-              try {
-                if (x && (isObject(x) || isFunction(x)) && isFunction(then = x['then'])) {
-                  if (x === promise2)
-                    throw new TypeError();
-                  then['call'](x,
-                      function() { if (!cbCalled++) resolve.apply(undef,arguments); } ,
-                      function(value){ if (!cbCalled++) promise2(false,[value]);});
-                }
-                else
-                  promise2(true, arguments);
-              }
-              catch(e) {
-                if (!cbCalled++)
-                  promise2(false, [e]);
-              }
-            }
-            resolve(f.apply(undef, values || []));
-          }
-          else
-            promise2(state, values);
-        }
-        catch (e) {
-          promise2(false, [e]);
-        }
-      };
-      if (state != null)
-        defer(callCallbacks);
-      else
-        deferred.push(callCallbacks);
-      return promise2;
-    };
-    return set;
-  };
-})();
-//endregion
-
 //region Public Methods
 /**
  * Talker
  * Used to open a communication line between this window and a remote window via postMessage.
- * @param remoteWindow - The remote `window` object to post/receive messages to/from.
+ * @param {Window} remoteWindow - The remote `window` object to post/receive messages to/from.
+ * @param {string} remoteOrigin - The origin from which to accept messages (or '*' to accept messages from any origin)
+ * @param {constructor} [PromiseConstructor] - A constructor for ES6 compatible Promises. If not given the native implementation is used.
  * @property {Window} remoteWindow - The remote window object this Talker is communicating with
  * @property {string} remoteOrigin - The protocol, host, and port you expect the remote to be
  * @property {number} timeout - The number of milliseconds to wait before assuming no response will be received.
@@ -116,13 +23,18 @@ var pinkySwearPromise = (function() {
  * @returns {Talker}
  * @constructor
  */
-var Talker = function(remoteWindow, remoteOrigin) {
+var Talker = function(remoteWindow, remoteOrigin, PromiseConstructor) {
     this.remoteWindow = remoteWindow;
     this.remoteOrigin = remoteOrigin;
+    this.Promise = PromiseConstructor || Promise;
     this.timeout = 3000;
 
     this.handshaken = false;
-    this.handshake = pinkySwearPromise();
+    this.handshake = new this.Promise(function(resolve)
+    {
+        this.resolveHandshake = resolve;
+    }.bind(this));
+
     this._id = 0;
     this._queue = [];
     this._sent = {};
@@ -146,17 +58,21 @@ var Talker = function(remoteWindow, remoteOrigin) {
 Talker.prototype.send = function(namespace, data, responseToId) {
     var message = new Talker.OutgoingMessage(this, namespace, data, responseToId);
 
-    var promise = pinkySwearPromise();
-    this._sent[message.id] = promise;
+    var self = this;
 
-    this._queue.push(message);
-    this._flushQueue();
+    return this.Promise.race(
+        [new this.Promise(function(resolve, reject)
+        {
+            self._sent[message.id] = resolve;
 
-    setTimeout(function() {
-        promise(false, [new Error(TALKER_ERR_TIMEOUT)]); // Reject the promise
-    }, this.timeout);
-
-    return promise;
+            self._queue.push(message);
+            self._flushQueue();
+        }),
+        new this.Promise(function(resolve, reject)
+        {
+            setTimeout(reject.bind(undefined, new Error(TALKER_ERR_TIMEOUT)), self.timeout);
+        })]
+    );
 };
 //endregion Public Methods
 
@@ -207,7 +123,7 @@ Talker.prototype._isSafeMessage = function(source, origin, type) {
 Talker.prototype._handleHandshake = function(object) {
     if (object.handshake) { this._sendHandshake(this.handshaken); } // One last handshake in case the remote window (which we now know is ready) hasn't seen ours yet
     this.handshaken = true;
-    this.handshake(true, [this.handshaken]);
+    this.resolveHandshake(true);
     this._flushQueue();
 };
 
@@ -230,7 +146,7 @@ Talker.prototype._handleMessage = function(rawObject) {
  */
 Talker.prototype._respondToMessage = function(id, message) {
     if (this._sent[id]) {
-        this._sent[id](true, [message]); // Resolve the promise
+        this._sent[id](message); // Resolve the promise
         delete this._sent[id];
     }
 };
