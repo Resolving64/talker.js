@@ -11,8 +11,4 @@ Please see [drive.secondstreet.com/introducing-talker](http://drive.secondstreet
 Building
 --------
 
-```
-npm install -g grunt-cli
-npm install
-grunt
-```
+The library is dependency-free except for a ES6 Promise shim, which can be referenced at runtime. Thus use the build tool of your liking. 
