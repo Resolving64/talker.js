@@ -100,14 +100,6 @@ var pinkySwearPromise = (function() {
     return set;
   };
 })();
-/**
- * Object Create
- */
-var objectCreate = function(proto) {
-    function ctor () { }
-    ctor.prototype = proto;
-    return new ctor();
-};
 //endregion
 
 //region Public Methods
@@ -341,7 +333,7 @@ Talker.OutgoingMessage = function(talker, namespace, data, responseToId) {
     this.responseToId = responseToId || null;
     this.id = this.talker._nextId();
 };
-Talker.OutgoingMessage.prototype = objectCreate(Talker.Message.prototype);
+Talker.OutgoingMessage.prototype = Object.create(Talker.Message.prototype);
 Talker.OutgoingMessage.prototype.constructor = Talker.Message;
 
 /**
@@ -373,7 +365,7 @@ Talker.IncomingMessage = function(talker, namespace, data, id) {
     Talker.Message.call(this, talker, namespace, data);
     this.id = id;
 };
-Talker.IncomingMessage.prototype = objectCreate(Talker.Message.prototype);
+Talker.IncomingMessage.prototype = Object.create(Talker.Message.prototype);
 Talker.IncomingMessage.prototype.constructor = Talker.Message;
 
 /**
