@@ -1,0 +1,8 @@
+title: Talker.js
+description: A tiny, promise-based library for cross-origin communication between frames and windows.
+google_analytics: 
+show_downloads: true
+theme: jekyll-theme-cayman
+
+gems:
+  - jekyll-mentions
